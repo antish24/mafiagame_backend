@@ -372,7 +372,7 @@ exports.closeGame = async (req, res) => {
     if (playerExist.role !== 'host') return res.status(500).json({ message: 'You are not the host' });
     
     const gameExist=await Game.findOne({gameCode:playerExist.gameCode})
-    if (!gameExist) return res.status(500).json({ message: 'not enoung players' });
+    if (!gameExist) return res.status(500).json({ message: 'game not found' });
 
     await Player.deleteMany({gameCode:gameCode})
     await Chat.deleteMany({gameCode:gameCode})
@@ -438,11 +438,9 @@ async function getPlayersWithHighestVoteCount (playerCount, playersId) {
           });
         }
         await Player.findByIdAndUpdate (playersWithHighestVote._id, {
-          openedgame: false,
-          gameCode: '',
           role: '',
           character: '',
-          status: '',
+          status: 'pruned',
           voteCount: 0,
         });
       }
@@ -462,18 +460,19 @@ async function getPlayersWithHighestVoteCount (playerCount, playersId) {
 }
 
 exports.VotePlayer = async (req, res) => {
-  const {votedPlayer, voter, token} = req.body;
+  const {player, gameCode, token} = req.body;
   try {
-    if (!token) return res.status (401).json ({message: 'not token provided'});
-    let playerId = jwt.verify (token, JWT_SECRET);
-    const PlayerExist = await Player.findById (playerId.userId);
-    if (!PlayerExist)
-      return res.status (500).json ({message: 'Player not found'});
+    let playerId = jwt.verify(token, JWT_SECRET);
+    const playerExist = await Player.findOne({ userId: playerId.userId,gameCode:gameCode});
 
-    await Player.findByIdAndUpdate (votedPlayer, {$inc: {voteCount: 1}});
-    await Player.findByIdAndUpdate (voter, {status: 'voted'});
+    if (!playerExist) return res.status(500).json({ message: 'Player not found' });
+    // if (playerExist.role !== 'host') return res.status(500).json({ message: 'You are not the host' });
+    
+    const gameExist=await Game.findOne({gameCode:playerExist.gameCode})
+    if (!gameExist) return res.status(500).json({ message: 'game not found' });
 
-    const gameCode = PlayerExist.gameCode;
+    await Player.findByIdAndUpdate (player, {$inc: {voteCount: 1}});
+    await Player.findByIdAndUpdate (playerExist._id, {status: 'voted'});
 
     const game = await Game.findOneAndUpdate (
       {gameCode: gameCode},
@@ -489,6 +488,38 @@ exports.VotePlayer = async (req, res) => {
     res.status (500).json ({error: error.message});
   }
 };
+
+exports.Votes = async (req, res) => {
+  const {gameCode, token} = req.body;
+  try {
+    let playerId = jwt.verify(token, JWT_SECRET);
+    const playerExist = await Player.findOne({ userId: playerId.userId,gameCode:gameCode});
+
+    if (!playerExist) return res.status(500).json({ message: 'Player not found' });
+    // if (playerExist.role !== 'host') return res.status(500).json({ message: 'You are not the host' });
+    
+    const gameExist=await Game.findOne({gameCode:playerExist.gameCode})
+    if (!gameExist) return res.status(500).json({ message: 'game not found' });
+
+    const players=await Player.find({gameCode:gameCode})
+    .populate ('userId', 'userName')
+    .exec ();
+
+
+    const vote=players.map (p => ({
+      name: p.userId.userName,
+      _id: p._id,
+      votes: p.voteCount,
+      canVote: p.status==='voted'?false:true,
+    }));
+    const canVote=playerExist.status==='voted'?true:false
+
+    res.status (200).json ({vote,canVote});
+  } catch (error) {
+    res.status (500).json ({error: error.message});
+  }
+};
+
 
 exports.nextRound = async (req, res) => {
   const {token, minute} = req.body;

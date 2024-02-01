@@ -51,6 +51,11 @@ io.on('connection', (socket) => {
     io.emit('new player', data);
   });
 
+  socket.on('voting', (data) => {
+    console.log('back message:', data);
+    io.emit('player voted', data);
+  });
+
   socket.on('start game', (data) => {
     console.log('back message:', data);
     io.emit('go to role', data);
