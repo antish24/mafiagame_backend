@@ -324,7 +324,11 @@ exports.startGame = async (req, res) => {
     if (!playerExist) return res.status(500).json({ message: 'Player not found' });
     if (playerExist.role !== 'host') return res.status(500).json({ message: 'You are not the host' });
     
+    const gameExist=await Game.findOne({gameCode:playerExist.gameCode})
+    if ((gameExist.playerSize < 3 || gameExist.playerSize!==gameExist.playerCount)) return res.status(500).json({ message: 'not enoung players' });
+
     const game=await Game.findOneAndUpdate({gameCode:playerExist.gameCode},{gameStatus:'Ready'})
+
 
     for(let x=0;x<game.playerCount;x++){
       console.log(game.playersId[x])
@@ -359,30 +363,21 @@ exports.startGame = async (req, res) => {
 };
 
 exports.closeGame = async (req, res) => {
-  const {token} = req.body;
+  const {token,gameCode} = req.body;
   try {
-    if (!token) return res.status (401).json ({message: 'not token provided'});
-    let playerId = jwt.verify (token, JWT_SECRET);
+    let playerId = jwt.verify(token, JWT_SECRET);
+    const playerExist = await Player.findOne({ userId: playerId.userId,gameCode: gameCode});
 
-    const PlayerExist = await Player.findById (playerId.userId);
-    if (!PlayerExist)
-      return res.status (500).json ({message: 'Player not found'});
-    if (!PlayerExist.openedgame)
-      return res.status (500).json ({message: "You don't have opened game"});
-    const gameCode = PlayerExist.gameCode;
+    if (!playerExist) return res.status(500).json({ message: 'Player not found' });
+    if (playerExist.role !== 'host') return res.status(500).json({ message: 'You are not the host' });
+    
+    const gameExist=await Game.findOne({gameCode:playerExist.gameCode})
+    if (!gameExist) return res.status(500).json({ message: 'not enoung players' });
 
-    const game = await Game.findOne ({gameCode: gameCode});
-    await Game.findOneAndDelete ({gameCode: gameCode});
-    for (let x = 0; x < game.playerCount; x++) {
-      await Player.findByIdAndUpdate (game.playersId[x], {
-        status: 'stopped',
-        gameCode: '',
-        openedgame: false,
-        role: '',
-        character: '',
-        voteCount: 0,
-      });
-    }
+    await Player.deleteMany({gameCode:gameCode})
+    await Chat.deleteMany({gameCode:gameCode})
+    await Game.deleteMany({gameCode:gameCode})
+
     res.status (200).json ({message: 'game closed'});
   } catch (error) {
     res.status (500).json ({error: error.message});

@@ -41,6 +41,11 @@ io.on('connection', (socket) => {
     io.emit('new player', data);
   });
 
+  socket.on('close game', (data) => {
+    console.log('back message:', data);
+    io.emit('closed game', data);
+  });
+
   socket.on('player kicked', (data) => {
     console.log('back message:', data);
     io.emit('new player', data);
